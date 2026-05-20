@@ -1,9 +1,10 @@
 from fastapi import FastAPI
-from app.engine.stub_engine import create_engine, EngineConfig
+from app.engine.ffi_engine import create_ffi_engine
+from app.engine.stub_engine import EngineConfig
+import os
 
 app = FastAPI(title="ZeroTrust Backend")
 
-# Initialize engine — swap create_engine import in Week 2 for real FFI engine
 config = EngineConfig(
     model_path            = "none",
     score_threshold_mfa   = 0.4,
@@ -12,9 +13,11 @@ config = EngineConfig(
     tick_interval_sec     = 60,
     max_users             = 1000
 )
-engine = create_engine(config)
+
+SO_PATH = os.path.join(os.path.dirname(__file__), "..", "libriskscore.so")
+engine  = create_ffi_engine(config, SO_PATH)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "engine": "stub"}
+    return {"status": "ok", "engine": "ffi"}
