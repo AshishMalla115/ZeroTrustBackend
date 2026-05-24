@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.engine.ffi_engine import create_ffi_engine
 from app.engine.stub_engine import EngineConfig
+from app.routes import auth
 import os
 
 app = FastAPI(title="ZeroTrust Backend")
@@ -14,8 +15,10 @@ config = EngineConfig(
     max_users             = 1000
 )
 
-SO_PATH = os.path.join(os.path.dirname(__file__), "..", "libriskscore.so")
+SO_PATH = os.getenv("SO_PATH", "/home/ashis/ZeroTrustBackend/libriskscore.so")
 engine  = create_ffi_engine(config, SO_PATH)
+
+app.include_router(auth.router)
 
 
 @app.get("/health")
