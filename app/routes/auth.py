@@ -11,6 +11,11 @@ import uuid
 import time
 from datetime import datetime, timedelta
 
+import redis
+import os
+
+redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -37,7 +42,20 @@ def login(
     # 1. Find user
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password_hash):
+        # Track failed attempts in Redis with 15 min TTL
+        fail_key  = f"failed:{body.email}"
+        attempts  = redis_client.incr(fail_key)
+        redis_client.expire(fail_key, 900)
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Check if too many failed attempts
+    fail_key = f"failed:{body.email}"
+    attempts = int(redis_client.get(fail_key) or 0)
+    if attempts >= 5:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed attempts. Try again in 15 minutes."
+        )
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account deactivated")
@@ -110,3 +128,32 @@ def login(
         risk_score   = decision.score,
         decision     = decision.decision.value,
     )
+
+@router.post("/logout")
+def logout(request: Request, db: Session = Depends(get_db)):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    token = auth_header.split(" ")[1]
+
+    try:
+        from app.core.security import decode_jwt
+        payload = decode_jwt(token)
+        jti     = payload.get("jti")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Mark session as expired instead of deleting
+    # (can't delete — risk_event_log has foreign key reference)
+    session = db.query(ActiveSession).filter(ActiveSession.jwt_jti == jti).first()
+    if session:
+        session.current_decision = "logged_out"
+        session.expires_at       = datetime.utcnow()
+        db.add(session)
+        db.commit()
+
+    # Blacklist the token in Redis until it expires
+    redis_client.setex(f"blacklist:{jti}", 3600, "1")
+
+    return {"message": "Logged out successfully"}
