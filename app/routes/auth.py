@@ -69,12 +69,12 @@ def login(
     ip_hash     = get_ip_hash(request)
 
     event = LoginEvent(
-        user_id         = user.id.int,
+        user_id         = user.id.int % (2**64),  # fit into uint64_t
         timestamp_unix  = int(time.time()),
         device_hash     = int(device_hash[:16], 16),
         ip_hash         = ip_hash,
         geo_hash        = 0,
-        failed_attempts = 0,
+        failed_attempts = min(attempts, 255),       # fit into uint8_t
     )
     decision = engine.evaluate_login(event)
 
