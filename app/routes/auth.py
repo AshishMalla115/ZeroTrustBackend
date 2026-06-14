@@ -143,7 +143,7 @@ def logout(request: Request, db: Session = Depends(get_db)):
         jti     = payload.get("jti")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+     
     # Mark session as expired instead of deleting
     # (can't delete — risk_event_log has foreign key reference)
     session = db.query(ActiveSession).filter(ActiveSession.jwt_jti == jti).first()

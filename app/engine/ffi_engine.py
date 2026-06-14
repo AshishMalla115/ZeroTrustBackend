@@ -9,7 +9,7 @@ import ctypes.util
 import os
 from app.engine.stub_engine import (
     RiskDecision, RiskLevel, DecisionType,
-    LoginEvent, SessionEvent, EngineConfig
+    LoginEvent, SessionEvent, EngineConfig, EventType
 )
 
 
