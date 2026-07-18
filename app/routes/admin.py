@@ -231,3 +231,44 @@ def update_threshold(
         "mfa_threshold":   body.mfa_threshold,
         "block_threshold": body.block_threshold,
     }
+import os
+
+@router.post("/model/reload")
+def reload_model(
+    model_path: str,
+    db:         Session = Depends(get_db),
+    admin:      User    = Depends(get_admin_user),
+):
+    """
+    Hot-reload Adnaan's ML model into the running C engine.
+    Call this after Adnaan delivers a new model.isof file.
+    """
+    from app.main import engine
+
+    if not os.path.exists(model_path):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model file not found: {model_path}"
+        )
+
+    ret = engine._lib.re_engine_reload_model(
+        engine._engine,
+        model_path.encode()
+    )
+
+    if ret != 0:
+        raise HTTPException(
+            status_code=500,
+            detail="Engine failed to load model"
+        )
+
+    write_audit_log(
+        db, admin.id, "reload_model",
+        details={"model_path": model_path}
+    )
+    db.commit()
+
+    return {
+        "message":    "Model reloaded successfully",
+        "model_path": model_path
+    }
