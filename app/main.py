@@ -33,3 +33,7 @@ def protected():
 @app.get("/health")
 def health():
     return {"status": "ok", "engine": "ffi"}
+from app.routes import auth, ws
+
+app.include_router(auth.router)
+app.include_router(ws.router)

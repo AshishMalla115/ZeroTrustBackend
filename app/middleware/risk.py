@@ -7,6 +7,8 @@ from app.models.db_models import ActiveSession, RiskEventLog
 from app.core.database import SessionLocal
 import hashlib
 import time
+from app.core.websocket import ws_manager
+import asyncio
 
 # Map URL paths to EventType the C engine understands
 PATH_EVENT_MAP = {
@@ -106,6 +108,16 @@ class RiskMiddleware(BaseHTTPMiddleware):
             db.add(log)
             db.commit()
 
+            # Broadcast to admin dashboard
+            asyncio.create_task(ws_manager.broadcast({
+                "type":       "risk_update",
+                "user_id":    str(session.user_id),
+                "session_id": str(session.id),
+                "path":       request.url.path,
+                "score":      decision.score,
+                "decision":   decision.decision.value,
+                "risk_level": decision.risk_level.value,
+            }))
             # Enforce decision
             if decision.decision == DecisionType.BLOCK:
                 return JSONResponse(
