@@ -37,3 +37,9 @@ from app.routes import auth, ws
 
 app.include_router(auth.router)
 app.include_router(ws.router)
+
+from app.routes import auth, ws, admin
+
+app.include_router(auth.router)
+app.include_router(ws.router)
+app.include_router(admin.router)
