@@ -81,6 +81,9 @@ class RiskMiddleware(BaseHTTPMiddleware):
                 bytes_transferred = 0,
                 endpoint_hash     = endpoint_hash,
             )
+            print(f"[Middleware] user_id_c={session.user_id.int % (2**64)} session_id_c={session.id.int % (2**64)}")
+            decision = self.engine.evaluate_event(c_event)
+            print(f"[Middleware] {request.url.path} → score={decision.score:.2f} decision={decision.decision}")
             decision = self.engine.evaluate_event(c_event)
             print(f"[Middleware] {request.url.path} → score={decision.score:.2f} decision={decision.decision}")
             # Update session risk score

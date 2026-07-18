@@ -68,18 +68,24 @@ def login(
     device_hash = get_device_hash(request)
     ip_hash     = get_ip_hash(request)
 
+    user_id_c = user.id.int % (2**64)
+
     event = LoginEvent(
-        user_id         = user.id.int % (2**64),  # fit into uint64_t
+        user_id         = user_id_c,  # fit into uint64_t
         timestamp_unix  = int(time.time()),
         device_hash     = int(device_hash[:16], 16),
         ip_hash         = ip_hash,
         geo_hash        = 0,
         failed_attempts = min(attempts, 255),       # fit into uint8_t
     )
+
+    
     decision = engine.evaluate_login(event)
 
     # 4. Save updated profile blob
-    profile_bytes = engine.profile_serialize(user.id.int)
+    profile_bytes = engine.profile_serialize(user_id_c)
+    print(f"[Login] user_id_c={user_id_c} profile_bytes={len(profile_bytes)} bytes")
+  
     if profile_bytes:
         user.profile_blob = profile_bytes
         db.add(user)
