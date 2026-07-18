@@ -9,6 +9,7 @@ import hashlib
 import time
 from app.core.websocket import ws_manager
 import asyncio
+from app.core.security import compute_hmac
 
 # Map URL paths to EventType the C engine understands
 PATH_EVENT_MAP = {
@@ -95,6 +96,16 @@ class RiskMiddleware(BaseHTTPMiddleware):
             db.add(session)
 
             # Write to risk event log
+            hmac_data = (
+                f"{session.id}:"
+                f"{session.user_id}:"
+                f"{event_type.value}:"
+                f"{prev_score}:"
+                f"{decision.score}:"
+                f"{decision.decision.value}"
+            )
+            hmac_value = compute_hmac(hmac_data)
+
             log = RiskEventLog(
                 session_id        = session.id,
                 user_id           = session.user_id,
@@ -103,7 +114,7 @@ class RiskMiddleware(BaseHTTPMiddleware):
                 risk_score_after  = decision.score,
                 decision          = decision.decision.value,
                 ml_score          = decision.ml_score,
-                hmac              = "stub",
+                hmac              = hmac_value,
             )
             db.add(log)
             db.commit()

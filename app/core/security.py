@@ -33,3 +33,17 @@ def create_jwt(user_id: str, jti: str) -> str:
 
 def decode_jwt(token: str) -> dict:
     return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+
+import hmac as py_hmac
+import hashlib
+
+
+def compute_hmac(data: str, secret: str = None) -> str:
+    """
+    Compute HMAC-SHA256 for a risk event log row.
+    Used to detect tampering with audit records.
+    """
+    secret = secret or JWT_SECRET
+    key    = secret.encode()
+    msg    = data.encode()
+    return py_hmac.new(key, msg, hashlib.sha256).hexdigest()

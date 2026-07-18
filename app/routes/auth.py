@@ -10,6 +10,7 @@ import hashlib
 import uuid
 import time
 from datetime import datetime, timedelta
+from app.core.security import compute_hmac
 
 import redis
 import os
@@ -115,7 +116,18 @@ def login(
     )
     db.add(session)
     db.flush()
+
     # 7. Write to risk event log
+    hmac_data = (
+        f"{session.id}:"
+        f"{user.id}:"
+        f"login:"
+        f"0.0:"
+        f"{decision.score}:"
+        f"{decision.decision.value}"
+    )
+    hmac_value = compute_hmac(hmac_data)
+
     log = RiskEventLog(
         session_id        = session.id,
         user_id           = user.id,
@@ -124,7 +136,7 @@ def login(
         risk_score_after  = decision.score,
         decision          = decision.decision.value,
         ml_score          = decision.ml_score,
-        hmac              = "stub",
+        hmac              = hmac_value,
     )
     db.add(log)
     db.commit()

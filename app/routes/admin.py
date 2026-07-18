@@ -6,6 +6,7 @@ from app.core.security import decode_jwt
 from app.models.db_models import User, ActiveSession, RiskEventLog, AdminAuditLog, Alert
 from datetime import datetime
 import uuid
+from app.schemas.api_schemas import ThresholdRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -196,18 +197,37 @@ def get_audit_log(
 
 @router.post("/threshold")
 def update_threshold(
-    mfa_threshold:   float,
-    block_threshold: float,
-    db:              Session = Depends(get_db),
-    admin:           User    = Depends(get_admin_user),
+    body:  ThresholdRequest,
+    db:    Session = Depends(get_db),
+    admin: User    = Depends(get_admin_user),
 ):
-    """Adjust risk thresholds live — engine picks up new values."""
     from app.main import engine, config
 
-    if not (0.0 < mfa_threshold < block_threshold < 1.0):
+    if not (body.mfa_threshold < body.block_threshold):
         raise HTTPException(
             status_code=400,
-            detail="Invalid thresholds — must satisfy 0 < mfa < block < 1"
+            detail="mfa_threshold must be less than block_threshold"
         )
 
     old_mfa   = config.score_threshold_mfa
+    old_block = config.score_threshold_block
+
+    config.score_threshold_mfa   = body.mfa_threshold
+    config.score_threshold_block = body.block_threshold
+
+    write_audit_log(
+        db, admin.id, "change_threshold",
+        details = {
+            "old_mfa":   old_mfa,
+            "new_mfa":   body.mfa_threshold,
+            "old_block": old_block,
+            "new_block": body.block_threshold,
+        }
+    )
+    db.commit()
+
+    return {
+        "message":         "Thresholds updated",
+        "mfa_threshold":   body.mfa_threshold,
+        "block_threshold": body.block_threshold,
+    }
