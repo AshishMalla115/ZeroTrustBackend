@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-
+from enum import IntEnum, Enum
 
 class RiskLevel(str, Enum):
     LOW      = "low"
@@ -16,14 +16,14 @@ class DecisionType(str, Enum):
     BLOCK        = "block"
 
 
-class EventType(str, Enum):
-    LOGIN           = "login"
-    API_CALL        = "api_call"
-    FILE_DOWNLOAD   = "file_download"
-    PASSWORD_CHANGE = "password_change"
-    ADMIN_ACTION    = "admin_action"
-    DATA_EXPORT     = "data_export"
-    FAILED_AUTH     = "failed_auth"
+class EventType(IntEnum):
+    LOGIN           = 0
+    API_CALL        = 1
+    FILE_DOWNLOAD   = 2
+    PASSWORD_CHANGE = 3
+    ADMIN_ACTION    = 4
+    DATA_EXPORT     = 5
+    FAILED_AUTH     = 6
 
 
 @dataclass

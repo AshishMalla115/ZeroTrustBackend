@@ -171,7 +171,6 @@ class FFIEngine:
 
     def evaluate_event(self, event: SessionEvent) -> RiskDecision:
         if not hasattr(self._lib, 're_evaluate_event'):
-            # Fall back to safe default until Uthkarsh ships this function
             return RiskDecision(
                 decision=DecisionType.ALLOW, risk_level=RiskLevel.LOW,
                 score=0.1, reason_code=0, ml_score=0.0, rule_score=0.1
@@ -179,11 +178,12 @@ class FFIEngine:
         c_event = C_SessionEvent(
             session_id        = event.session_id,
             user_id           = event.user_id,
-            event_type        = list(EventType).index(event.event_type),
+            event_type        = int(event.event_type),  # IntEnum → int directly
             timestamp_unix    = event.timestamp_unix,
             bytes_transferred = event.bytes_transferred,
             endpoint_hash     = event.endpoint_hash,
         )
+        print(f"[FFI] event_type={int(event.event_type)} user_id={event.user_id}")
         result = self._lib.re_evaluate_event(self._engine, ctypes.byref(c_event))
         return _convert_decision(result)
 
