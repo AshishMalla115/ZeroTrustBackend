@@ -1,0 +1,94 @@
+# docker-compose.yml — ZeroTrust Security Engine
+# Wires all four layers together for integration and demo
+
+version: "3.9"
+
+services:
+
+  # ── Layer 4: PostgreSQL (Indra) ─────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: zerotrust_postgres
+    environment:
+      POSTGRES_DB:       zero_trust_db
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Layer 4: Redis (Indra) ───────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: zerotrust_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Layer 3: Backend (Ashish) ────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zerotrust_backend
+    env_file:
+      - .env.docker
+    environment:
+      DATABASE_URL: postgresql://ztrust_app:zerotrustengine@postgres:5432/zero_trust_db
+      REDIS_URL:    redis://redis:6379
+      SO_PATH:      /app/libriskscore.so
+      JWT_SECRET:   ${JWT_SECRET:-supersecretkey_changethisinproduction}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./libriskscore.so:/app/libriskscore.so
+
+  # ── Layer 2: ML Pipeline (Adnaan) ───────────────────────────────────────────
+  # Placeholder — fill in when Adnaan delivers his Dockerfile
+  # ml:
+  #   build:
+  #     context: ../ZeroTrustML
+  #     dockerfile: Dockerfile
+  #   container_name: zerotrust_ml
+  #   volumes:
+  #     - model_data:/app/models
+  ml:
+    build:
+      context: ../ZeroTrustML
+      dockerfile: Dockerfile
+    container_name: zerotrust_ml
+    environment:
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_NAME:     zero_trust_db
+      DB_USER:     ztrust_readonly
+      DB_PASSWORD: ReadOnlyPass456!
+    volumes:
+      - model_data:/ml_pipeline/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
+
+volumes:
+  postgres_data:
+  model_data:
