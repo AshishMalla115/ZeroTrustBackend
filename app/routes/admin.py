@@ -239,19 +239,39 @@ def reload_model(
     db:         Session = Depends(get_db),
     admin:      User    = Depends(get_admin_user),
 ):
+    from app.main import engine
     import os
-    if not os.path.exists(model_path):
-        raise HTTPException(status_code=400, detail=f"Model file not found: {model_path}")
 
-    # re_engine_reload_model has a known segfault bug in current .so builds
-    # Endpoint is implemented and wired — pending fix from Layer 1
+    if not os.path.exists(model_path):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model file not found: {model_path}"
+        )
+
+    try:
+        ret = engine._lib.re_engine_reload_model(
+            engine._engine,
+            model_path.encode('utf-8')
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Engine reload failed: {str(e)}"
+        )
+
+    if ret != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Engine returned error code {ret}"
+        )
+
     write_audit_log(
         db, admin.id, "reload_model",
-        details={"model_path": model_path, "status": "pending_engine_fix"}
+        details={"model_path": model_path}
     )
     db.commit()
 
-    raise HTTPException(
-        status_code=503,
-        detail="Model reload pending C engine fix — re_engine_reload_model segfaults on current build"
-    )
+    return {
+        "message":    "Model reloaded successfully",
+        "model_path": model_path
+    }

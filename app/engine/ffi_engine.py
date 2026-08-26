@@ -156,6 +156,12 @@ class FFIEngine:
                 ctypes.c_uint32
             ]
             lib.re_profile_deserialize.restype = ctypes.c_int
+        if hasattr(lib, 're_engine_reload_model'):
+            lib.re_engine_reload_model.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_char_p
+            ]
+            lib.re_engine_reload_model.restype = ctypes.c_int
 
     def evaluate_login(self, event: LoginEvent) -> RiskDecision:
         c_event = C_LoginEvent(
