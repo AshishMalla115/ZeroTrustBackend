@@ -72,7 +72,7 @@ services:
   #     - model_data:/app/models
   ml:
     build:
-      context: ../ZeroTrustML
+      context: ../ZeroTrustML/ml_pipeline
       dockerfile: Dockerfile
     container_name: zerotrust_ml
     environment:

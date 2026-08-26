@@ -24,6 +24,8 @@ COPY scripts/docker_migrate.sh ./scripts/docker_migrate.sh
 # Copy Uthkarsh's compiled C engine
 COPY libriskscore.so /app/libriskscore.so
 
+COPY model.isof /app/model.isof
+
 # Make migration script executable
 RUN chmod +x scripts/docker_migrate.sh
 

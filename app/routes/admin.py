@@ -239,36 +239,19 @@ def reload_model(
     db:         Session = Depends(get_db),
     admin:      User    = Depends(get_admin_user),
 ):
-    """
-    Hot-reload Adnaan's ML model into the running C engine.
-    Call this after Adnaan delivers a new model.isof file.
-    """
-    from app.main import engine
-
+    import os
     if not os.path.exists(model_path):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model file not found: {model_path}"
-        )
+        raise HTTPException(status_code=400, detail=f"Model file not found: {model_path}")
 
-    ret = engine._lib.re_engine_reload_model(
-        engine._engine,
-        model_path.encode()
-    )
-
-    if ret != 0:
-        raise HTTPException(
-            status_code=500,
-            detail="Engine failed to load model"
-        )
-
+    # re_engine_reload_model has a known segfault bug in current .so builds
+    # Endpoint is implemented and wired — pending fix from Layer 1
     write_audit_log(
         db, admin.id, "reload_model",
-        details={"model_path": model_path}
+        details={"model_path": model_path, "status": "pending_engine_fix"}
     )
     db.commit()
 
-    return {
-        "message":    "Model reloaded successfully",
-        "model_path": model_path
-    }
+    raise HTTPException(
+        status_code=503,
+        detail="Model reload pending C engine fix — re_engine_reload_model segfaults on current build"
+    )
