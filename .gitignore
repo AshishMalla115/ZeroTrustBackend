@@ -2,5 +2,7 @@ venv/
 __pycache__/
 *.pyc
 .env
+.env.docker
+*.zip
 *.egg-info/
 .pytest_cache/

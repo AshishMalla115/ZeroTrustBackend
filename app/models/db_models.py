@@ -24,6 +24,7 @@ class User(Base):
     profile_blob  = Column(LargeBinary, nullable=True)        # Uthkarsh's serialized UserProfile
     is_active     = Column(Boolean, nullable=False, default=True)
     mfa_enabled   = Column(Boolean, nullable=False, default=False)
+    mfa_secret    = Column(String(64), nullable=True)         # base32 TOTP secret
     created_at    = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at    = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())
 
@@ -41,6 +42,8 @@ class ActiveSession(Base):
     created_at         = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     expires_at         = Column(DateTime(timezone=True), nullable=False)
     last_event_at      = Column(DateTime(timezone=True), nullable=True)
+    mfa_verified_at    = Column(DateTime(timezone=True), nullable=True)
+    mfa_pending        = Column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class RiskEventLog(Base):
@@ -80,19 +83,21 @@ class DeviceRegistry(Base):
     is_trusted  = Column(Boolean, nullable=False, default=False)
     first_seen  = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     last_seen   = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    login_count = Column(Integer, nullable=False, default=0)
 
 
 class Alert(Base):
     __tablename__ = "alerts"
 
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id     = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    session_id  = Column(UUID(as_uuid=True), ForeignKey("active_sessions.id"), nullable=True)
-    alert_type  = Column(String(50), nullable=False)          # 'high_risk_score' | 'new_device' etc.
-    severity    = Column(String(10), nullable=False)          # 'low' | 'medium' | 'high' | 'critical'
-    resolved    = Column(Boolean, nullable=False, default=False, index=True)
-    resolved_by = Column(UUID(as_uuid=True), nullable=True)
-    created_at  = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id       = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    session_id    = Column(UUID(as_uuid=True), ForeignKey("active_sessions.id"), nullable=True)
+    alert_type    = Column(String(50), nullable=False)          # 'high_risk_score' | 'new_device' etc.
+    severity      = Column(String(10), nullable=False)          # 'low' | 'medium' | 'high' | 'critical'
+    resolved      = Column(Boolean, nullable=False, default=False, index=True)
+    resolved_by   = Column(UUID(as_uuid=True), nullable=True)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    created_at    = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
 
 
 class MLModelVersion(Base):
@@ -101,8 +106,17 @@ class MLModelVersion(Base):
     id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     file_path          = Column(Text, nullable=False)
     training_date      = Column(DateTime(timezone=True), nullable=False)
-    training_data_size = Column(Integer, nullable=False)
-    false_positive_rate = Column(Float, nullable=False)
-    detection_rate     = Column(Float, nullable=False)
+    training_data_size = Column(Integer, nullable=True)
+    false_positive_rate = Column(Float, nullable=True)
+    detection_rate     = Column(Float, nullable=True)
     active             = Column(Boolean, nullable=False)      # trigger: only one true at a time
     created_at         = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ThresholdConfig(Base):
+    __tablename__ = "threshold_config"
+
+    id = Column(Integer, primary_key=True)  # single row, id=1
+    mfa_threshold = Column(Float, nullable=False)
+    block_threshold = Column(Float, nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

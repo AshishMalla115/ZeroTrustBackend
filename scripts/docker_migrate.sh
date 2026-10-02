@@ -42,4 +42,23 @@ echo "[migrate] Running: alembic upgrade head"
 
 alembic upgrade head
 
+echo "[migrate] Granting ML pipeline permissions..."
+python -c "
+import psycopg2, os
+conn = psycopg2.connect(
+    host=os.environ['DB_HOST'],
+    port=os.environ['DB_PORT'],
+    dbname=os.environ['DB_NAME'],
+    user=os.environ['DB_USER'],
+    password=os.environ['DB_PASSWORD']
+)
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute(\"GRANT INSERT ON ml_model_versions TO ztrust_readonly;\")
+cur.execute(\"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ztrust_readonly;\")
+cur.execute(\"GRANT SELECT ON ALL TABLES IN SCHEMA public TO ztrust_readonly;\")
+conn.close()
+print('[migrate] ML permissions granted.')
+"
+
 echo "[migrate] Migrations complete. All tables created."

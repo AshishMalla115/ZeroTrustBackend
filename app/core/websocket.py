@@ -12,7 +12,7 @@ class WebSocketManager:
         self.active_connections: Dict[str, WebSocket] = {}
 
     async def connect(self, websocket: WebSocket, client_id: str):
-        await websocket.accept()
+        # websocket is already accepted by the endpoint
         self.active_connections[client_id] = websocket
         print(f"[WS] Client connected: {client_id} — total: {len(self.active_connections)}")
 

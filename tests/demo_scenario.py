@@ -28,10 +28,13 @@ def scenario_1_normal_login():
         "password": "password123"
     })
     data = r.json()
-    print(f"  Score    : {data.get('risk_score', 'N/A'):.3f}")
+    score = data.get('risk_score', 0)
+    if isinstance(score, str):
+        score = float(score) if score.replace('.','').isdigit() else 0.0
+    print(f"  Score    : {score:.3f}")
     print(f"  Decision : {data.get('decision', 'N/A')}")
-    check("Status 200",       r.status_code == 200,  r.status_code)
-    check("Token issued",     "access_token" in data, "access_token" in data)
+    check("Status 200",            r.status_code == 200,  r.status_code)
+    check("Token issued",          "access_token" in data, "access_token" in data)
     check("Decision is allow/mfa", data.get("decision") in ("allow", "mfa"), data.get("decision"))
     return data.get("access_token")
 

@@ -3,10 +3,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from app.core.security import decode_jwt
 from app.engine.stub_engine import SessionEvent, EventType, DecisionType
-from app.models.db_models import ActiveSession, RiskEventLog
+from app.models.db_models import ActiveSession, RiskEventLog, Alert
 from app.core.database import SessionLocal
 import hashlib
 import time
+from datetime import datetime, timezone, timedelta
 from app.core.websocket import ws_manager
 import asyncio
 from app.core.security import compute_hmac
@@ -21,6 +22,9 @@ PATH_EVENT_MAP = {
     "/auth/logout": None,  # skip — no session yet
     "/health":    None,    # skip — public
 }
+
+MFA_WINDOW_SEC = 900   # how long a verified TOTP satisfies step-up
+MFA_VERIFY_PATH = "/auth/mfa/verify"
 
 SKIP_PATHS = {"/auth/login", "/auth/logout", "/health", "/docs", "/openapi.json"}
 
@@ -45,8 +49,16 @@ class RiskMiddleware(BaseHTTPMiddleware):
             payload = decode_jwt(token)
             jti     = payload.get("jti")
             user_id = payload.get("sub")
+            role    = payload.get("role", "user")
         except Exception:
             return JSONResponse(status_code=401, content={"detail": "Invalid token"})
+
+        # Admin area requires admin role before any risk scoring
+        if request.url.path.startswith("/admin") and role != "admin":
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Admin access required"}
+            )
 
         db = SessionLocal()
         try:
@@ -62,6 +74,13 @@ class RiskMiddleware(BaseHTTPMiddleware):
 
             if not session:
                 return JSONResponse(status_code=401, content={"detail": "Session not found"})
+
+            # Login was risky: nothing works until TOTP is verified
+            if session.mfa_pending and request.url.path != MFA_VERIFY_PATH:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "mfa_required", "reason": "login"}
+                )
 
             # Map path to event type
             event_type = EventType.API_CALL
@@ -87,12 +106,12 @@ class RiskMiddleware(BaseHTTPMiddleware):
             print(f"[Middleware] user_id_c={session.user_id.int % (2**64)} session_id_c={session.id.int % (2**64)}")
             decision = self.engine.evaluate_event(c_event)
             print(f"[Middleware] {request.url.path} → score={decision.score:.2f} decision={decision.decision}")
-            decision = self.engine.evaluate_event(c_event)
-            print(f"[Middleware] {request.url.path} → score={decision.score:.2f} decision={decision.decision}")
+           
             # Update session risk score
             prev_score = session.current_risk_score
             session.current_risk_score = decision.score
             session.current_decision   = decision.decision.value
+            session.last_event_at      = datetime.now(timezone.utc)
             db.add(session)
 
             # Write to risk event log
@@ -117,6 +136,45 @@ class RiskMiddleware(BaseHTTPMiddleware):
                 hmac              = hmac_value,
             )
             db.add(log)
+
+            # ---- Alert generation ----
+            pending_alert = None
+            try:
+                alert_type = None
+                severity = None
+                if decision.decision == DecisionType.BLOCK:
+                    alert_type = "block"
+                    severity = "high"
+                elif decision.decision == DecisionType.MFA_REQUIRED:
+                    v = session.mfa_verified_at
+                    verified = bool(v) and (
+                        datetime.now(timezone.utc) - v
+                    ).total_seconds() < MFA_WINDOW_SEC
+                    if not verified:
+                        alert_type = "mfa_step_up_failed"
+                        severity = "medium"
+                elif decision.score >= 0.7:
+                    alert_type = "high_score"
+                    severity = "high"
+
+                if alert_type:
+                    recent = db.query(Alert).filter(
+                        Alert.session_id == session.id,
+                        Alert.alert_type == alert_type,
+                        Alert.created_at >= datetime.now(timezone.utc) - timedelta(seconds=60)
+                    ).first()
+                    if not recent:
+                        pending_alert = Alert(
+                            user_id=session.user_id,
+                            session_id=session.id,
+                            alert_type=alert_type,
+                            severity=severity,
+                            resolved=False,
+                        )
+                        db.add(pending_alert)
+            except Exception as e:
+                print(f"[Alert] failed to create alert: {e}")
+
             db.commit()
 
             # Broadcast to admin dashboard
@@ -128,13 +186,40 @@ class RiskMiddleware(BaseHTTPMiddleware):
                 "score":      decision.score,
                 "decision":   decision.decision.value,
                 "risk_level": decision.risk_level.value,
+                "timestamp":  datetime.now(timezone.utc).isoformat(),
             }))
+
+            # Broadcast alert if created
+            if pending_alert:
+                asyncio.create_task(ws_manager.broadcast({
+                    "type": "alert",
+                    "data": {
+                        "alert_id":   str(pending_alert.id),
+                        "user_id":    str(pending_alert.user_id),
+                        "session_id": str(pending_alert.session_id),
+                        "alert_type": pending_alert.alert_type,
+                        "severity":   pending_alert.severity,
+                        "created_at": pending_alert.created_at.isoformat(),
+                    }
+                }))
             # Enforce decision
             if decision.decision == DecisionType.BLOCK:
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Blocked by risk engine", "score": decision.score}
                 )
+
+            if decision.decision == DecisionType.MFA_REQUIRED:
+                v = session.mfa_verified_at
+                verified = bool(v) and (
+                    datetime.now(timezone.utc) - v
+                ).total_seconds() < MFA_WINDOW_SEC
+                if not verified:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "mfa_required", "reason": "step_up",
+                                 "score": decision.score}
+                    )
 
             if decision.decision == DecisionType.RESTRICT:
                 sensitive = ["/admin", "/export", "/download"]

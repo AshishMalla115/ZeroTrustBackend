@@ -16,21 +16,18 @@ class LoginRequest(BaseModel):
             raise ValueError("Email too long")
         return v
 
-    @field_validator("password")
-    @classmethod
-    def password_must_be_valid(cls, v):
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        if len(v) > 72:
-            raise ValueError("Password too long")
-        return v
-
 
 class LoginResponse(BaseModel):
     access_token: str
     token_type:   str = "bearer"
     risk_score:   float
     decision:     str
+    mfa_required: bool = False   # True -> call POST /auth/mfa/verify before anything else
+    mfa_enrolled: bool = True    # False -> user has no TOTP secret yet
+
+
+class MFAVerifyRequest(BaseModel):
+    code: str
 
 
 class MFARequiredResponse(BaseModel):
