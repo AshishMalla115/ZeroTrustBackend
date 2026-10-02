@@ -5,11 +5,12 @@ import uuid
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Text, Boolean, Float,
-    Integer, DateTime, LargeBinary, ForeignKey, BigInteger, JSON
+    Integer, DateTime, LargeBinary, ForeignKey, BigInteger, JSON, text
 )
 from sqlalchemy.dialects.postgresql import UUID, FLOAT as PG_FLOAT
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
+
 
 Base = declarative_base()
 
@@ -103,7 +104,7 @@ class Alert(Base):
 class MLModelVersion(Base):
     __tablename__ = "ml_model_versions"
 
-    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()"))
     file_path          = Column(Text, nullable=False)
     training_date      = Column(DateTime(timezone=True), nullable=False)
     training_data_size = Column(Integer, nullable=True)
