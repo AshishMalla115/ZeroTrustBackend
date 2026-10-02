@@ -6,3 +6,5 @@ __pycache__/
 *.zip
 *.egg-info/
 .pytest_cache/
+
+.env.docker
