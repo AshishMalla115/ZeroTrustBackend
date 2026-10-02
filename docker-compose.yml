@@ -1,7 +1,9 @@
 # docker-compose.yml — ZeroTrust Security Engine
-# Wires all four layers together for integration and demo
-
-version: "3.9"
+# Wires all four layers together for integration and demo.
+#
+# Run with:  docker compose --env-file .env.docker up --build
+# (--env-file feeds the ${VAR} substitutions below; without it compose stops
+#  with a "set X in .env.docker" message instead of starting with defaults.)
 
 services:
 
@@ -10,16 +12,19 @@ services:
     image: postgres:15
     container_name: zerotrust_postgres
     environment:
-      POSTGRES_DB:       zero_trust_db
-      POSTGRES_USER:     postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:          zero_trust_db
+      POSTGRES_USER:        postgres
+      POSTGRES_PASSWORD:    "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}"
+      # read by scripts/init-db.sh on first start only
+      APP_DB_PASSWORD:      "${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env.docker}"
+      READONLY_DB_PASSWORD: "${READONLY_DB_PASSWORD:?set READONLY_DB_PASSWORD in .env.docker}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"      # loopback only; 5433 avoids the WSL Postgres on 5432
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zero_trust_db"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -29,7 +34,7 @@ services:
     image: redis:7-alpine
     container_name: zerotrust_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6380:6379"      # loopback only; containers reach it as redis:6379
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -43,16 +48,23 @@ services:
       dockerfile: Dockerfile
     container_name: zerotrust_backend
     env_file:
-      - .env.docker
+      - .env.docker                # other app settings (e.g. MODEL_PATH); explicit values below win
     environment:
-      DATABASE_URL: postgresql://ztrust_app:zerotrustengine@postgres:5432/zero_trust_db
-      REDIS_URL:    redis://redis:6379
-      SO_PATH:      /app/libriskscore.so
-      JWT_SECRET:   ${JWT_SECRET:-supersecretkey_changethisinproduction}
-      JWT_ALGORITHM: HS256
-      JWT_EXPIRE_MINUTES: 60
+      DATABASE_URL:    "postgresql://ztrust_app:${APP_DB_PASSWORD:?set APP_DB_PASSWORD}@postgres:5432/zero_trust_db"
+      # used by scripts/docker_migrate.sh
+      DB_HOST:         postgres
+      DB_PORT:         "5432"
+      DB_NAME:         zero_trust_db
+      DB_USER:         ztrust_app
+      DB_PASSWORD:     "${APP_DB_PASSWORD:?set APP_DB_PASSWORD}"
+      REDIS_URL:       redis://redis:6379
+      SO_PATH:         /app/libriskscore.so
+      JWT_SECRET:      "${JWT_SECRET:?set JWT_SECRET in .env.docker}"
+      HMAC_SECRET_KEY: "${HMAC_SECRET_KEY:?set HMAC_SECRET_KEY in .env.docker}"
+      JWT_ALGORITHM:   HS256
+      JWT_EXPIRE_MINUTES: "60"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"      # change to "8000:8000" only if the frontend runs on another machine
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,14 +74,6 @@ services:
       - ./libriskscore.so:/app/libriskscore.so
 
   # ── Layer 2: ML Pipeline (Adnaan) ───────────────────────────────────────────
-  # Placeholder — fill in when Adnaan delivers his Dockerfile
-  # ml:
-  #   build:
-  #     context: ../ZeroTrustML
-  #     dockerfile: Dockerfile
-  #   container_name: zerotrust_ml
-  #   volumes:
-  #     - model_data:/app/models
   ml:
     build:
       context: ../ZeroTrustML/ml_pipeline
@@ -77,17 +81,15 @@ services:
     container_name: zerotrust_ml
     environment:
       DB_HOST:     postgres
-      DB_PORT:     5432
+      DB_PORT:     "5432"
       DB_NAME:     zero_trust_db
       DB_USER:     ztrust_readonly
-      DB_PASSWORD: ReadOnlyPass456!
+      DB_PASSWORD: "${READONLY_DB_PASSWORD:?set READONLY_DB_PASSWORD in .env.docker}"
     volumes:
       - model_data:/ml_pipeline/models
     depends_on:
       postgres:
         condition: service_healthy
-
-
 
 volumes:
   postgres_data:
