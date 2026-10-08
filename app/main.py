@@ -54,14 +54,8 @@ async def lifespan(app):
 app = FastAPI(title="ZeroTrust Backend", lifespan=lifespan)
 
 
-# 2. CORS first — must be before RiskMiddleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+
 
 # 3. Create engine
 MODEL_PATH = os.getenv("MODEL_PATH", "/home/ashis/ZeroTrustBackend/model.isof")
@@ -79,7 +73,14 @@ engine  = create_ffi_engine(config, SO_PATH)
 
 # 4. Risk middleware after CORS
 app.add_middleware(RiskMiddleware, engine=engine)
-
+#changed from first to last to avoid CORS preflight issues with OPTIONS requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # 4. Include routes
 app.include_router(auth.router)
 app.include_router(ws.router)
