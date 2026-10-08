@@ -20,6 +20,8 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
 COPY scripts/docker_migrate.sh ./scripts/docker_migrate.sh
+COPY scripts/seed_admin.py ./scripts/seed_admin.py
+
 
 # Copy Uthkarsh's compiled C engine
 COPY libriskscore.so /app/libriskscore.so

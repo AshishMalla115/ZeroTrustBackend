@@ -4,7 +4,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    Column, String, Text, Boolean, Float,
+    Column, String, Text, Boolean, Float, Index,
     Integer, DateTime, LargeBinary, ForeignKey, BigInteger, JSON, text
 )
 from sqlalchemy.dialects.postgresql import UUID, FLOAT as PG_FLOAT
@@ -112,6 +112,7 @@ class MLModelVersion(Base):
     detection_rate     = Column(Float, nullable=True)
     active             = Column(Boolean, nullable=False)      # trigger: only one true at a time
     created_at         = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__     = (Index("uq_ml_model_versions_one_active", "active", unique=True, postgresql_where=text("active")),)
 
 
 class ThresholdConfig(Base):
